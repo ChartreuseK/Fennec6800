@@ -32,3 +32,10 @@ The BOM contains the reference designators, quantity, a description of the part,
 The 2716 EPROM on the Fennec 6800 should be burned with the file `software/monitor/monitor.bin`. This file is in a flat binary format suitable for burning onto a 2kB EPROM. If your program needs Intel HEX or Motorola SREC format it will need to be converted first. The ORG address is F800 (upper 2kB of address space). 
 
 2716 EPROMs are single supply EPROMs, however they need a programmer capable of a 26v programming voltage. The common TL866CS/A is only capable of 21v, and the newer TL866II+ is only capable of 18v max, and won't be able to program the EPROM. For a more convient option there exists the 28C16 EEPROM which is pin compatible and can be programmed with only 5v and is suitable for either TL866 programmer, or even possibly with an Arduino and some custom code. The 28C16 is no-longer newly manufactured but can be fairly readilly sourced. Alternatively using a pin adapter a 28-pin 28C64 (still sold new on Digikey/Mouser from Atmel) can be converted to the 28C16 24-pin pinout. 
+
+## Assembling the Monitor
+The monitor source code is designed to be assembled with the cross-platform (AS macro assembler)[http://john.ccac.rwth-aachen.de:8000/as/). It may be possible to assemble with other assemblers supporting the 6800, but some changes to the local label syntax may be required. The output of the macro assembler is it's own p file format which can then be converted using p2bin or p2hex to a suitable output format.
+
+    asl -L monitor.asm && p2bin monitor.p
+
+

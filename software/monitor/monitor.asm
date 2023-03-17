@@ -65,6 +65,8 @@
 ;
 ; Changelog
 ;-----------------------------------------------------------------------
+; 0.3.2
+;   Added AUX to device routine options (DEVIN/DEVOUT/DEVINNB)
 ; 0.3.1
 ;   Added option rom detection and execution
 ; 0.3 
@@ -137,8 +139,8 @@ DEVIN	EQU AUXINNB+3	; 3 - JMP to device routine GETC
 DEVOUT	EQU DEVIN+3	; 3 - JMP to device routine PUTC
 DEVINNB	EQU DEVOUT+3	; 3 - JMP to device routine GETC (non-blocking)
 			;  Device routines take device # in B
-			;  0 = console, 1 = uart a, 2 = uart b, 
-			;  3+ rom or user defined
+			;  0 = console, 1 = aux, 2 = uart a, 3 = uart b, 
+			;  4+ rom or user defined
 CONTRE	EQU DEVINNB+3	; End of controllable routines
 
 
@@ -568,12 +570,15 @@ DDEVIN
 	TSTB
 	BEQ	.CON
 	CMPB #1
-	BEQ	.S0
+	BEQ	.AUX
 	CMPB #2
+	BEQ	.S0
+	CMPB #3
 	BEQ	.S1
 	; Invalid ignore
 	RTS
 .CON	JMP CONIN
+.AUX	JMP AUXIN
 .S0	JMP S0IN
 .S1	JMP S1IN
 
@@ -582,12 +587,15 @@ DDEVOUT
 	TSTB
 	BEQ	.CON
 	CMPB #1
-	BEQ	.S0
+	BEQ	.AUX
 	CMPB #2
+	BEQ	.S0
+	CMPB #3
 	BEQ	.S1
 	; Invalid ignore
 	RTS
 .CON	JMP CONOUT
+.AUX	JMP AUXOUT
 .S0	JMP S0OUT
 .S1	JMP S1OUT
 
@@ -595,12 +603,15 @@ DDEVINNB
 	TSTB
 	BEQ	.CON
 	CMPB #1
-	BEQ	.S0
+	BEQ	.AUX
 	CMPB #2
+	BEQ	.S0
+	CMPB #3
 	BEQ	.S1
 	; Invalid ignore
 	RTS
 .CON	JMP CONINNB
+.AUX	JMP AUXINNB
 .S0	JMP S0IN_NB
 .S1	JMP S1IN_NB
 
