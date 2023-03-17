@@ -7,15 +7,15 @@ A Motorola 6800 Based Expandable Single Board Computer
 The Fennec 6800 is a Motorola 6800 based single board computer (SBC) created with the inspiration of targeting 1977 components and features. It features an original Motorola 6800 processor running at whopping 921.6kHz, 8kB of the latest 2114 SRAM, 2kB of ROM using the brand new 2716 EPROM, and dual serial ports. An optional 40 pin expansion bus allows for connectivity to other modules, such as the Fennec VTI video terminal interface board, or to create your own attachments.
 
 ## Specifications
-    * Motorola 6800 @ 921.6kHz
-    * 1-8kB of onboard SRAM using pairs of 2114 (1k x 4 bit) SRAM chips. Using the optional RAM adapter board up to 32kB of RAM can be fitted with minimal modifications
-    * 2kB, 2716 EPROM containing the Fennec Monitor. Optional support for a 4kB 2732 EPROM
-    * Dual 6850 ACIA, RS-232 UART connected to dual 25 pin EIA-232 ports in DTE wiring.
-    * Selectable serial baud rates via DIP switches from 600-9600 baud + 115,200 in default /16 mode, 150-2400+28,800 in /64 mode when configured. Non-standard baud rates are possible using a different master oscillator, but CPU speed will be affected.
-    * Single rail design. Requires only a 5v regulated source of power.
-    * 40 pin expansion bus with pre-decoded expansion board select signals, allowing for quite prototyping of custom expansions.
-    * Beautiful blue PCB with exposed traces for a refined look.
-    * Compact Board design, only 8.6×5.2 inches!
+* Motorola 6800 @ 921.6kHz
+* 1-8kB of onboard SRAM using pairs of 2114 (1k x 4 bit) SRAM chips. Using the optional RAM adapter board up to 32kB of RAM can be fitted with minimal modifications
+* 2kB, 2716 EPROM containing the Fennec Monitor. Optional support for a 4kB 2732 EPROM
+* Dual 6850 ACIA, RS-232 UART connected to dual 25 pin EIA-232 ports in DTE wiring.
+* Selectable serial baud rates via DIP switches from 600-9600 baud + 115,200 in default /16 mode, 150-2400+28,800 in /64 mode when configured. Non-standard baud rates are possible using a different master oscillator, but CPU speed will be affected.
+* Single rail design. Requires only a 5v regulated source of power.
+* 40 pin expansion bus with pre-decoded expansion board select signals, allowing for quite prototyping of custom expansions.
+* Beautiful blue PCB with exposed traces for a refined look.
+* Compact Board design, only 8.6×5.2 inches!
 
 The Fennec 6800 includes a capable and expandable ROM monitor built in, requiring no tedious toggling of front panel switches to enter and begin executing code. Only a terminal is required to begin making use of the system, simply hook the terminal up to the bottom serial port (furthest from the power jack). This serial port is the local console port in the default system, all traffic is normally routed through this port, though inside the monitor certain commands may be redirected to the auxiliary port located above it.
 
