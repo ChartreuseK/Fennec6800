@@ -40,4 +40,5 @@ The monitor source code is designed to be assembled with the cross-platform [AS 
 
     asl -L monitor.asm && p2bin monitor.p
 
-
+## 62256 RAM Adapter
+In the folder Fennec 62256 RAM Adapter you can find a second PCB which allows the use of common and still in production 62256 (32k x 8) SRAM chips in place of the vintage and hard to source 2114 sram that the Fennec is designed for. This board slots into the top two ram sockets as well as the 74LS138 socket to provide the full 8kB of RAM that the board is designed for. Optionally A13 and A14 may be run to this adapter board to give the Fennec 32kB of RAM, more than normally designed for. 
