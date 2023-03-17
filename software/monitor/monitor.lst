@@ -1,0 +1,970 @@
+ AS V1.42 Beta [Bld 237] - Source File monitor.asm - Page 1 - 02/08/2023 03:36:03 AM
+
+
+       1/       0 :                     ; Fennec 6800 ROM monitor/mini-OS
+       2/       0 :                     ; 2022/2023 Chartreuse 
+       3/       0 :                     ;
+       4/       0 :                     ; Usage:
+       5/       0 :                     ;   All commands begin with a single letter, addr/ess are specified
+       6/       0 :                     ;   as a full 16-bit (4 digit) hex value, and data as a full 8-bit
+       7/       0 :                     ;   (2 digit) hex value. 
+       8/       0 :                     ;   There is no backspace as input is processed immediately.
+       9/       0 :                     ;   Invalid characters are silently ignored.
+      10/       0 :                     ;   If a mistake is made, press ESC (Ctrl-[) to cancel the line and
+      11/       0 :                     ;   return to the prompt.
+      12/       0 :                     ;
+      13/       0 :                     ;   Commands:
+      14/       0 :                     ;    E - (E)xamine RAM, performs a hex dump from between two specified
+      15/       0 :                     ;        addresses. The dash between addresses is NOT entered by the 
+      16/       0 :                     ;        user but automatically by the monitor
+      17/       0 :                     ;        eg.
+      18/       0 :                     ;           E0000-0010
+      19/       0 :                     ;        OUTPUT:
+      20/       0 :                     ;	    0000: 00 20 08 20 00 00 DF 46 2C 0E 6F 36 7E FA 08 7E
+      21/       0 :                     ;  
+      22/       0 :                     ;    D - (D)eposit RAM, allows the user to enter hex data in memory 
+      23/       0 :                     ;        starting at the specified address. After entering the address
+      24/       0 :                     ;        the starting address will be displayed and the user can then
+      25/       0 :                     ;        start entering bytes. After every byte (2 digits) entered a 
+      26/       0 :                     ;        space will be returned showing the byte has been entered into
+      27/       0 :                     ;        RAM. Every 16 bytes a newline and the next address will be 
+      28/       0 :                     ;        displayed similar to the examine command. Press return or ESC
+      29/       0 :                     ;        after you are done with entering bytes.
+      30/       0 :                     ;	 eg. 
+      31/       0 :                     ;            D0100
+      32/       0 :                     ;            0100:12 34(ESC)
+      33/       0 :                     ;            *
+      34/       0 :                     ;    G - (G)oto address. Jumps to the specified address and resumes
+      35/       0 :                     ;        execution at that point. This is performed as a subroutine 
+      36/       0 :                     ;        jump, so if a program preserves the monitors stack, it can 
+      37/       0 :                     ;        RTS back into the monitor.
+      38/       0 :                     ;        eg.
+      39/       0 :                     ;             G0100
+      40/       0 :                     ;
+      41/       0 :                     ;    R - (R)ecv XMODEM. Recieves a program using XMODEM (checksum) 
+      42/       0 :                     ;        starting at the specified address. After specifying address
+      43/       0 :                     ;        the user will be prompted to start the xmodem transfer on 
+      44/       0 :                     ;        the remote computer. At this point start the transfer and when
+      45/       0 :                     ;        completed you will be returned to the monitor prompt. If the
+      46/       0 :                     ;        prompt is not visible, try hitting ESC to get it to reprint.
+      47/       0 :                     ;        eg.
+      48/       0 :                     ;             R0100
+      49/       0 :                     ;             SEND FILE NOW
+      50/       0 :                     ;             [user starts xmodem transfer in their terminal program]
+      51/       0 :                     ;             *
+      52/       0 :                     ;
+      53/       0 :                     ;    S - (S)end XMODEM. Sends a block of memory using XMODEM (checksum)
+      54/       0 :                     ;        from between the two specified addresses. After specifying the
+      55/       0 :                     ;        second address, the user will be prompted to start an xmodem
+      56/       0 :                     ;        recieve on their terminal. At this point, start the transfer
+      57/       0 :                     ;        and when completed you will be returned to the monitor prompt.
+      58/       0 :                     ;        If the prompt is not visible, try hitting ESC to get it to
+      59/       0 :                     ;        reprint.
+      60/       0 :                     ;        eg.
+ AS V1.42 Beta [Bld 237] - Source File monitor.asm - Page 2 - 02/08/2023 03:36:03 AM
+
+
+      61/       0 :                     ;             S0100-0200
+      62/       0 :                     ;             RECV FILE NOW
+      63/       0 :                     ;             [user starts xmodem recieve in their terminal program]
+      64/       0 :                     ;             *
+      65/       0 :                     ;
+      66/       0 :                     ; Changelog
+      67/       0 :                     ;-----------------------------------------------------------------------
+      68/       0 :                     ; 0.3.1
+      69/       0 :                     ;   Added option rom detection and execution
+      70/       0 :                     ; 0.3 
+      71/       0 :                     ;   Converted to changable I/O routine pointers in preparation for 
+      72/       0 :                     ;   VTI board and other option roms to change the default console and
+      73/       0 :                     ;   others.
+      74/       0 :                     ;
+      75/       0 :                     ; 0.2 Added XMODEM send and recieve
+      76/       0 :                     ; 0.1 Initial version
+      77/       0 :                     ;-----------------------------
+      78/       0 :                     	CPU 6800
+      79/       0 :                     
+      80/       0 :                     ;-----------------------------------------------------------------------
+      81/       0 :                     ; Address constants
+      82/       0 : =$1FFF               RAMTOP	EQU $1FFF	; Last address to try sizing till
+      83/       0 :                     			; $1FFF = Full 8kB system (16x 2114 sram)
+      84/       0 : =$FF                 MONSTK	EQU $00FF	; Monitor reserves first 256 bytes of RAM
+      85/       0 : =$8000               PSTART	EQU $8000	; Start of peripheral block
+      86/       0 : =$4                  ROMSPA	EQU $04		; Spacing between option ROMS to test at *256
+      87/       0 : =$E0                 ENDROM	EQU $E0		; Check all the way till EXP0
+      88/       0 : =$F10F               MAGIC	EQU $F10F	; Magic word for option ROMS
+      89/       0 : =$F1                 MAGIC0	EQU $F1
+      90/       0 : =$F                  MAGIC1	EQU $0F
+      91/       0 :                     
+      92/       0 : =$EFF0               UART1	EQU $EFF0	; Onboard UART A (lower port)
+      93/       0 : =$EFF2               UART2	EQU $EFF2	; Onboard UART B (upper port)
+      94/       0 :                     
+      95/       0 :                     ;-----------------------------------------------------------------------
+      96/       0 :                     ; Constants
+      97/       0 : ='*'                 PROMPT	EQU '*'
+      98/       0 :                     
+      99/       0 :                     ; ASCII constants
+     100/       0 : =$1                  SOH	EQU $01
+     101/       0 : =$4                  EOT	EQU $04
+     102/       0 : =$6                  ACK	EQU $06
+     103/       0 : =$15                 NAK	EQU $15
+     104/       0 : =$17                 ETB	EQU $17
+     105/       0 : =$1B                 ESC	EQU $1B
+     106/       0 :                     
+     107/       0 :                     ;-----------------------------------------------------------------------
+     108/       0 :                     ; Option ROM setup
+     109/       0 : =$F10F               ROMSIG	EQU $F10F	; Signature to load ROM
+     110/       0 : =$A                  ROMNLEN	EQU 10		; Length of ROM name
+     111/       0 : =$10                 ROMOFF	EQU 16		; Code start byte of ROM
+     112/       0 :                     
+     113/       0 :                     ;-----------------------------------------------------------------------
+     114/       0 :                     ; Variables
+     115/       0 : =$0                  ADDRT	EQU $0000	; 2 - Temp address 
+     116/       0 : =$2                  RAMKB	EQU $0002	; 1 - # of kB of ram
+     117/       0 : =$3                  BYTET	EQU $0003	; 1 - Temp byte
+     118/       0 : =$4                  ADDRP	EQU $0004	; 2 - printing address
+     119/       0 : =$6                  TIMER	EQU $0006	; 2 - timer for delays
+     120/       0 : =$8                  SEQ	EQU $0008	; 1 - Current block for XMODEM
+ AS V1.42 Beta [Bld 237] - Source File monitor.asm - Page 3 - 02/08/2023 03:36:03 AM
+
+
+     121/       0 : =$9                  CSUM	EQU $0009	; 1 - Current checksum for XMODEM
+     122/       0 : =$A                  COUNT	EQU $000A	; 1 - Count of bytes (XMODEM)
+     123/       0 : =$B                  LAST	EQU $000B	; 1 - Last acknowledgement (XMODEM)
+     124/       0 :                     ; Controllable routines
+     125/       0 :                     ;  - expect no reg preserved, result if any in A
+     126/       0 : =$C                  CONTR	EQU $000C	; Start of controllable routines
+     127/       0 :                     
+     128/       0 : =$C                  CONIN	EQU CONTR	; 3 - JMP to GETC routine for console
+     129/       0 : =$F                  CONOUT	EQU CONIN+3	; 3 - JMP TO PUTC routine for console
+     130/       0 : =$12                 CONINNB	EQU CONOUT+3	; 3 - JMP to GETC (non-blocking) for console
+     131/       0 :                     
+     132/       0 : =$15                 AUXIN	EQU CONINNB+3	; 3 - JMP to GETC routine for aux 
+     133/       0 : =$18                 AUXOUT	EQU AUXIN+3	; 3 - JMP TO PUTC routine for aux 
+     134/       0 : =$1B                 AUXINNB	EQU AUXOUT+3	; 3 - JMP to GETC (non-blocking) for aux
+     135/       0 :                     
+     136/       0 : =$1E                 DEVIN	EQU AUXINNB+3	; 3 - JMP to device routine GETC
+     137/       0 : =$21                 DEVOUT	EQU DEVIN+3	; 3 - JMP to device routine PUTC
+     138/       0 : =$24                 DEVINNB	EQU DEVOUT+3	; 3 - JMP to device routine GETC (non-blocking)
+     139/       0 :                     			;  Device routines take device # in B
+     140/       0 :                     			;  0 = console, 1 = uart a, 2 = uart b, 
+     141/       0 :                     			;  3+ rom or user defined
+     142/       0 : =$27                 CONTRE	EQU DEVINNB+3	; End of controllable routines
+     143/       0 :                     
+     144/       0 :                     
+     145/       0 :                     
+     146/       0 :                     
+     147/       0 :                     
+     148/       0 :                     
+     149/       0 :                     ;CONOUT EQU S0OUT
+     150/       0 :                     ;CONIN EQU S0IN
+     151/       0 :                     ;-----------------------------------------------------------------------
+     152/       0 :                     ; Program
+     153/    F800 :                     	ORG $F800	; 2kB ROM
+     154/    F800 :                     START
+     155/    F800 : 7E F8 1E            	JMP ENTER
+     156/    F803 :                     ; Default controllable routines
+     157/    F803 :                     DEFRT
+     158/    F803 : 7E FA 6D            	JMP S0IN
+     159/    F806 : 7E FA 83            	JMP S0OUT
+     160/    F809 : 7E FA 99            	JMP S0IN_NB
+     161/    F80C : 7E FA 78            	JMP S1IN
+     162/    F80F : 7E FA 8E            	JMP S1OUT
+     163/    F812 : 7E FA A7            	JMP S1IN_NB
+     164/    F815 : 7E FA B5            	JMP DDEVIN
+     165/    F818 : 7E FA CA            	JMP DDEVOUT
+     166/    F81B : 7E FA DF            	JMP DDEVINNB
+     167/    F81E :                     DEFRTE
+     168/    F81E : =$1B                 DEFRTLEN EQU *-DEFRT
+     169/    F81E :                     
+     170/    F81E :                     
+     171/    F81E :                     ENTER
+     172/    F81E : 8E 00 FF            	LDS #MONSTK	; Stack pointer
+     173/    F821 : BD FA 08            	JSR UARTINIT
+     174/    F824 : BD FA 19            	JSR CONTINIT	; Initialize controlable routines
+     175/    F827 : BD FA 2D            	JSR RAMSIZE	; Size ram
+     176/    F82A : BD F8 BC            	JSR FINDROM	; Find and run any option roms
+     177/    F82D : BD FA 59            	JSR BANNER
+     178/    F830 : BD F8 E2            	JSR PRINTROM	; Find roms and print their names
+     179/    F833 :                     	
+     180/    F833 : 8E 00 FF            WARMST	LDS #MONSTK	; Reset Stack pointer
+ AS V1.42 Beta [Bld 237] - Source File monitor.asm - Page 4 - 02/08/2023 03:36:03 AM
+
+
+     181/    F836 : BD FA F4            LOOP	JSR NEWLINE
+     182/    F839 : 86 2A               	LDAA #PROMPT
+     183/    F83B : BD 00 0F            	JSR CONOUT
+     184/    F83E : BD 00 0C            LOOPI	JSR CONIN
+     185/    F841 : BD FB 09            	JSR TOUPPER	; Convert to upper
+     186/    F844 : 81 45               	CMPA #'E'	; Examine
+     187/    F846 : 27 16               	BEQ EXAMINE
+     188/    F848 : 81 44               	CMPA #'D'	; Deposit
+     189/    F84A : 27 1A               	BEQ DEPOSIT
+     190/    F84C : 81 47               	CMPA #'G'	; Goto      
+     191/    F84E : 27 1E               	BEQ GOTO
+     192/    F850 : 81 52               	CMPA #'R'	; XMODEM Recieve
+     193/    F852 : 27 23               	BEQ XRECV
+     194/    F854 : 81 53               	CMPA #'S'	; XMODEM Send
+     195/    F856 : 27 2C               	BEQ XSEND
+     196/    F858 : 81 0D               	CMPA #'\r'
+     197/    F85A : 27 DA               	BEQ LOOP
+     198/    F85C : 20 E0               	BRA LOOPI	; Invalid character
+     199/    F85E :                     EXAMINE
+     200/    F85E : BD F8 91            	JSR ADDR2
+     201/    F861 : BD F9 63            	JSR DUMP
+     202/    F864 : 20 D0               	BRA LOOP
+     203/    F866 : BD F8 9B            DEPOSIT	JSR ADDR1
+     204/    F869 : BD F9 1B            	JSR DEPLOOP
+     205/    F86C : 20 C8               	BRA LOOP
+     206/    F86E : BD F8 9B            GOTO	JSR ADDR1
+     207/    F871 : DE 00               	LDX ADDRT
+     208/    F873 : AD 00               	JSR 0,X
+     209/    F875 : 20 BF               	BRA LOOP
+     210/    F877 : BD F8 9B            XRECV	JSR ADDR1
+     211/    F87A : 86 01               	LDAA #1		; Send message
+     212/    F87C : BD F8 A5            	JSR XMSG
+     213/    F87F : BD FB 14            	JSR XMDMRECV
+     214/    F882 : 20 B2               	BRA LOOP
+     215/    F884 : BD F8 91            XSEND	JSR ADDR2
+     216/    F887 : 86 00               	LDAA #0		; Recv message
+     217/    F889 : BD F8 A5            	JSR XMSG
+     218/    F88C : BD FB B6            	JSR XMDMSEND
+     219/    F88F : 20 A5               	BRA LOOP
+     220/    F891 :                     ; Address prompts for command
+     221/    F891 :                     ADDR2:
+     222/    F891 : BD 00 0F            	JSR CONOUT
+     223/    F894 : BD F9 97            	JSR READADDR
+     224/    F897 : 86 2D               	LDAA #'-'
+     225/    F899 : DE 00               	LDX ADDRT
+     226/    F89B : BD 00 0F            ADDR1:	JSR CONOUT
+     227/    F89E : BD F9 97            	JSR READADDR
+     228/    F8A1 : BD FA F4            	JSR NEWLINE
+     229/    F8A4 : 39                  	RTS
+     230/    F8A5 :                     ; Xmodem messages
+     231/    F8A5 :                     XMSG:
+     232/    F8A5 : DF 04               	STX ADDRP	; Save address
+     233/    F8A7 : CE FC 4F            	LDX #S_RECV
+     234/    F8AA : 4D                  	TSTA 
+     235/    F8AB : 27 03               	BEQ .RECV
+     236/    F8AD : CE FC 4A            	LDX #S_SEND
+     237/    F8B0 : BD FA FE            .RECV	JSR PRINTSTR
+     238/    F8B3 : CE FC 54            	LDX #S_FILE
+     239/    F8B6 : BD FA FE            	JSR PRINTSTR
+     240/    F8B9 : DE 04               	LDX ADDRP	; Restore addr
+ AS V1.42 Beta [Bld 237] - Source File monitor.asm - Page 5 - 02/08/2023 03:36:03 AM
+
+
+     241/    F8BB : 39                  	RTS
+     242/    F8BC :                     ;-----------------------------------------------------------------------
+     243/    F8BC :                     ; Find and execute any option roms	
+     244/    F8BC :                     FINDROM
+     245/    F8BC : CE 80 00            	LDX #PSTART	; Start of peripheral block
+     246/    F8BF :                     .LOOP
+     247/    F8BF : 86 F1               	LDAA #MAGIC0
+     248/    F8C1 : A1 00               	CMPA 0,X
+     249/    F8C3 : 26 06               	BNE .NEXT
+     250/    F8C5 : 86 0F               	LDAA #MAGIC1
+     251/    F8C7 : A1 01               	CMPA 1,X
+     252/    F8C9 : 27 0F               	BEQ .FOUND	; Both magic # match
+     253/    F8CB : DF 00               .NEXT	STX ADDRT
+     254/    F8CD : 96 00               	LDAA ADDRT
+     255/    F8CF : 8B 04               	ADDA #ROMSPA	; Move to next addr to check
+     256/    F8D1 : 97 00               	STAA ADDRT
+     257/    F8D3 : DE 00               	LDX ADDRT
+     258/    F8D5 : 81 E0               	CMPA #ENDROM	; Have we reached the last block to check?
+     259/    F8D7 : 25 E6               	BCS .LOOP	; (unsigned LT) Continue if not past last addr
+     260/    F8D9 : 39                  	RTS		; Last block, we're done
+     261/    F8DA :                     .FOUND	; Found a valid signature
+     262/    F8DA : DF 00               	STX ADDRT	; Preserve address
+     263/    F8DC : AD 10               	JSR 16,X	; Jump to 16th byte of ROM to start
+     264/    F8DE : DE 00               	LDX ADDRT	; We're back, restore and keep looking
+     265/    F8E0 : 20 E9               	BRA .NEXT
+     266/    F8E2 :                     	
+     267/    F8E2 :                     ;-----------------------------------------------------------------------
+     268/    F8E2 :                     ; Find and print option rom names	
+     269/    F8E2 :                     ;  We can't do this in the FINDROM routine as the console may be defined
+     270/    F8E2 :                     ;  by an option ROM (like the VTI)
+     271/    F8E2 :                     PRINTROM
+     272/    F8E2 : CE FC 60            	LDX #S_OPTION
+     273/    F8E5 : BD FA FE            	JSR PRINTSTR
+     274/    F8E8 : CE 80 00            	LDX #PSTART	; Start of peripheral block
+     275/    F8EB :                     .LOOP
+     276/    F8EB : 86 F1               	LDAA #MAGIC0
+     277/    F8ED : A1 00               	CMPA 0,X
+     278/    F8EF : 26 06               	BNE .NEXT
+     279/    F8F1 : 86 0F               	LDAA #MAGIC1
+     280/    F8F3 : A1 01               	CMPA 1,X
+     281/    F8F5 : 27 0F               	BEQ .FOUND	; Both magic # match
+     282/    F8F7 : DF 00               .NEXT	STX ADDRT
+     283/    F8F9 : 96 00               	LDAA ADDRT
+     284/    F8FB : 8B 04               	ADDA #ROMSPA	; Move to next addr to check
+     285/    F8FD : 97 00               	STAA ADDRT
+     286/    F8FF : DE 00               	LDX ADDRT
+     287/    F901 : 81 E0               	CMPA #ENDROM	; Have we reached the last block to check?
+     288/    F903 : 25 E6               	BCS .LOOP	; (unsigned LT) Continue if not past last addr
+     289/    F905 : 39                  	RTS		; Last block, we're done
+     290/    F906 :                     .FOUND	; Found a valid signature
+     291/    F906 : DF 00               	STX ADDRT	; Preserve address
+     292/    F908 : DF 04               	STX ADDRP	; For printing
+     293/    F90A : BD F9 EB            	JSR PRINTWORD
+     294/    F90D : 86 2D               	LDAA #'-'
+     295/    F90F : BD 00 0F            	JSR CONOUT
+     296/    F912 : 08                  	INX
+     297/    F913 : 08                  	INX		; String starts from 2nd byte of ROM
+     298/    F914 : BD FA FE            	JSR PRINTSTR
+     299/    F917 : DE 00               	LDX ADDRT	; Restore and resume
+     300/    F919 : 20 DC               	BRA .NEXT
+ AS V1.42 Beta [Bld 237] - Source File monitor.asm - Page 6 - 02/08/2023 03:36:03 AM
+
+
+     301/    F91B :                     	
+     302/    F91B :                     
+     303/    F91B :                     	
+     304/    F91B :                     	
+     305/    F91B :                     ;-----------------------------------------------------------------------
+     306/    F91B :                     DEPLOOP
+     307/    F91B : DE 00               	LDX ADDRT
+     308/    F91D :                     .NEXT
+     309/    F91D : DF 04               	STX ADDRP
+     310/    F91F : BD F9 EB            	JSR PRINTWORD
+     311/    F922 : 86 3A               	LDAA #':'
+     312/    F924 : BD 00 0F            	JSR CONOUT
+     313/    F927 : C6 10               	LDAB #16	; Max 16 per line
+     314/    F929 :                     .LOOP
+     315/    F929 : 37                  	PSHB
+     316/    F92A :                     .IGNORE
+     317/    F92A : BD 00 0C            	JSR CONIN
+     318/    F92D : BD FB 09            	JSR TOUPPER
+     319/    F930 : 81 1B               	CMPA #ESC
+     320/    F932 : 26 03               	BNE .T2
+     321/    F934 : 7E F8 33            	JMP WARMST
+     322/    F937 : 81 0D               .T2	CMPA #'\r'
+     323/    F939 : 27 26               	BEQ .DONE
+     324/    F93B : 81 30               	CMPA #'0'
+     325/    F93D : 2D EB               	BLT .IGNORE
+     326/    F93F : 81 39               	CMPA #'9'
+     327/    F941 : 2F 08               	BLE .DIGIT
+     328/    F943 : 81 41               	CMPA #'A'
+     329/    F945 : 2D E3               	BLT .IGNORE
+     330/    F947 : 81 46               	CMPA #'F'
+     331/    F949 : 2E DF               	BGT .IGNORE
+     332/    F94B : BD F9 8E            .DIGIT	JSR READBYTEP
+     333/    F94E : 96 03               	LDAA BYTET
+     334/    F950 : A7 00               	STAA 0,X
+     335/    F952 : 08                  	INX
+     336/    F953 : 86 20               	LDAA #' '
+     337/    F955 : BD 00 0F            	JSR CONOUT
+     338/    F958 : 33                  	PULB
+     339/    F959 : 5A                  	DECB
+     340/    F95A : 26 CD               	BNE .LOOP
+     341/    F95C : BD FA F4            	JSR NEWLINE
+     342/    F95F : 20 BC               	BRA .NEXT
+     343/    F961 : 33                  .DONE	PULB
+     344/    F962 : 39                  	RTS
+     345/    F963 :                     	
+     346/    F963 :                     ;-----------------------------------------------------------------------
+     347/    F963 :                     ; Dump hex from addr in X to ADDRT
+     348/    F963 :                     DUMP
+     349/    F963 :                     	; Print addr 1st column
+     350/    F963 : DF 04               	STX ADDRP
+     351/    F965 : BD F9 EB            	JSR PRINTWORD
+     352/    F968 : 86 3A               	LDAA #':'
+     353/    F96A : BD 00 0F            	JSR CONOUT
+     354/    F96D : C6 10               	LDAB #16	; Print 16 bytes per line
+     355/    F96F :                     .LOOP
+     356/    F96F : 37                  	PSHB
+     357/    F970 : 86 20               	LDAA #' '
+     358/    F972 : BD 00 0F            	JSR CONOUT
+     359/    F975 : A6 00               	LDAA 0,X
+     360/    F977 : BD F9 F2            	JSR PRINTBYTE
+ AS V1.42 Beta [Bld 237] - Source File monitor.asm - Page 7 - 02/08/2023 03:36:03 AM
+
+
+     361/    F97A : 33                  	PULB
+     362/    F97B : 08                  	INX
+     363/    F97C : 9C 00               	CPX ADDRT
+     364/    F97E : 27 0D               	BEQ .DONE
+     365/    F980 : 5A                  	DECB	
+     366/    F981 : 26 EC               	BNE .LOOP
+     367/    F983 : BD FA F4            	JSR NEWLINE
+     368/    F986 : BD 00 12            	JSR CONINNB	; Check if user wants intervention
+     369/    F989 : 81 1B               	CMPA #ESC
+     370/    F98B : 26 D6               	BNE DUMP
+     371/    F98D :                     .DONE
+     372/    F98D : 39                  	RTS
+     373/    F98E :                     	
+     374/    F98E :                     ;-----------------------------------------------------------------------
+     375/    F98E :                     ; Read byte with first character preset
+     376/    F98E :                     READBYTEP 
+     377/    F98E : C6 00               	LDAB #0
+     378/    F990 : D7 03               	STAB BYTET
+     379/    F992 : C6 02               	LDAB #2
+     380/    F994 : 37                  	PSHB
+     381/    F995 : 20 23               	BRA READBYTE.NEXT3
+     382/    F997 :                     	
+     383/    F997 :                     ;-----------------------------------------------------------------------
+     384/    F997 :                     ; Read in 2 byte address
+     385/    F997 :                     READADDR
+     386/    F997 : BD F9 A6            	JSR READBYTE
+     387/    F99A : 96 03               	LDAA BYTET
+     388/    F99C : 97 00               	STAA ADDRT
+     389/    F99E : BD F9 A6            	JSR READBYTE
+     390/    F9A1 : 96 03               	LDAA BYTET
+     391/    F9A3 : 97 01               	STAA ADDRT+1
+     392/    F9A5 : 39                  	RTS
+     393/    F9A6 :                     ;-----------------------------------------------------------------------
+     394/    F9A6 :                     ; Read in 1 byte in hex
+     395/    F9A6 :                     READBYTE
+     396/    F9A6 : 86 00               	LDAA #0
+     397/    F9A8 : 97 03               	STAA BYTET
+     398/    F9AA : C6 02               	LDAB #2		; Expect 2 digits
+     399/    F9AC : 37                  .NEXT	PSHB
+     400/    F9AD : BD 00 0C            .NEXT2	JSR CONIN
+     401/    F9B0 : BD FB 09            	JSR TOUPPER
+     402/    F9B3 : 81 1B               	CMPA #ESC
+     403/    F9B5 : 26 03               	BNE .NEXT3
+     404/    F9B7 : 7E F8 33            	JMP WARMST
+     405/    F9BA : 81 30               .NEXT3	CMPA #'0'
+     406/    F9BC : 2D EF               	BLT .NEXT2	; Ignore
+     407/    F9BE : 81 39               	CMPA #'9'
+     408/    F9C0 : 2F 0F               	BLE .DIGIT
+     409/    F9C2 : 81 41               	CMPA #'A'
+     410/    F9C4 : 2D E7               	BLT .NEXT2	; Ignore
+     411/    F9C6 : 81 46               	CMPA #'F'
+     412/    F9C8 : 2E E3               	BGT .NEXT2	; Ignore
+     413/    F9CA : BD 00 0F            	JSR CONOUT
+     414/    F9CD :                     	; A-F
+     415/    F9CD : 80 07               	SUBA #'A'-':'	; Convert to 3A-3F
+     416/    F9CF : 20 03               	BRA .DIGIT2
+     417/    F9D1 :                     .DIGIT
+     418/    F9D1 : BD 00 0F            	JSR CONOUT
+     419/    F9D4 :                     .DIGIT2
+     420/    F9D4 : 78 00 03            	ASL BYTET
+ AS V1.42 Beta [Bld 237] - Source File monitor.asm - Page 8 - 02/08/2023 03:36:03 AM
+
+
+     421/    F9D7 : 78 00 03            	ASL BYTET
+     422/    F9DA : 78 00 03            	ASL BYTET
+     423/    F9DD : 78 00 03            	ASL BYTET
+     424/    F9E0 : 80 30               	SUBA #'0'
+     425/    F9E2 : 9B 03               	ADDA BYTET
+     426/    F9E4 : 97 03               	STAA BYTET
+     427/    F9E6 : 33                  	PULB
+     428/    F9E7 : 5A                  	DECB
+     429/    F9E8 : 26 C2               	BNE .NEXT	; Go till we get all digits
+     430/    F9EA : 39                  	RTS		; Address in BYTET
+     431/    F9EB :                     	
+     432/    F9EB :                     ;-----------------------------------------------------------------------
+     433/    F9EB :                     PRINTWORD
+     434/    F9EB : 96 04               	LDAA ADDRP
+     435/    F9ED : BD F9 F2            	JSR PRINTBYTE
+     436/    F9F0 : 96 05               	LDAA ADDRP+1
+     437/    F9F2 :                     	; Fall into printbyte
+     438/    F9F2 :                     ;-----------------------------------------------------------------------
+     439/    F9F2 :                     PRINTBYTE
+     440/    F9F2 : 36                  	PSHA
+     441/    F9F3 : 47                  	ASR A
+     442/    F9F4 : 47                  	ASR A
+     443/    F9F5 : 47                  	ASR A
+     444/    F9F6 : 47                  	ASR A
+     445/    F9F7 : BD F9 FB            	JSR PRINTNYB
+     446/    F9FA : 32                  	PULA
+     447/    F9FB :                     	; Fall into printnyb
+     448/    F9FB :                     ;-----------------------------------------------------------------------
+     449/    F9FB :                     PRINTNYB
+     450/    F9FB : 84 0F               	ANDA #$0F
+     451/    F9FD : 8B 30               	ADDA #'0'
+     452/    F9FF : 81 39               	CMPA #'9'
+     453/    FA01 : 2F 02               	BLE .NOFIX
+     454/    FA03 : 8B 07               	ADDA #'A'-':'
+     455/    FA05 : 7E 00 0F            .NOFIX	JMP CONOUT
+     456/    FA08 :                     	; Tail call
+     457/    FA08 :                     	
+     458/    FA08 :                     ;-----------------------------------------------------------------------
+     459/    FA08 :                     ; Initialize both UARTs
+     460/    FA08 :                     UARTINIT
+     461/    FA08 : 86 03               	LDAA #$03	; Master reset
+     462/    FA0A : B7 EF F0            	STAA UART1
+     463/    FA0D : B7 EF F2            	STAA UART2
+     464/    FA10 : 86 15               	LDAA #$15	; /16 8N1, RTS asserted no interrupts
+     465/    FA12 : B7 EF F0            	STAA UART1
+     466/    FA15 : B7 EF F2            	STAA UART2
+     467/    FA18 : 39                  	RTS
+     468/    FA19 :                     
+     469/    FA19 :                     CONTINIT
+     470/    FA19 : CE F8 1D            	LDX #DEFRTE-1	; End of default set in X
+     471/    FA1C : 9F 00               	STS ADDRT	; Store stack pointer
+     472/    FA1E : 8E 00 26            	LDS #CONTRE-1	; End of controllable
+     473/    FA21 :                     	
+     474/    FA21 : C6 1B               	LDAB #DEFRTLEN	; Number of bytes to copy
+     475/    FA23 : A6 00               .COPY	LDAA 0,X
+     476/    FA25 : 36                  	PSHA		; Copy using stack operations
+     477/    FA26 : 09                  	DEX
+     478/    FA27 : 5A                  	DECB
+     479/    FA28 : 26 F9               	BNE .COPY
+     480/    FA2A :                     	; Routines copied restore stack
+ AS V1.42 Beta [Bld 237] - Source File monitor.asm - Page 9 - 02/08/2023 03:36:03 AM
+
+
+     481/    FA2A : 9E 00               	LDS ADDRT
+     482/    FA2C : 39                  	RTS
+     483/    FA2D :                     	
+     484/    FA2D :                     ;-----------------------------------------------------------------------
+     485/    FA2D :                     ; We assume that at least 1kB of RAM has to exist since we're using 
+     486/    FA2D :                     ; subroutines here. So the first bank must be populated. Test up till
+     487/    FA2D :                     ; RAMTOP (8kB by default)
+     488/    FA2D :                     RAMSIZE
+     489/    FA2D : CE 04 00            	LDX #$0400	; Start just after 1kB
+     490/    FA30 : DF 00               	STX ADDRT
+     491/    FA32 : C6 01               	LDAB #1		; Count of KB
+     492/    FA34 : 86 55               .SIZE	LDAA #$55	; Store 55AA
+     493/    FA36 : A7 04               	STAA 4,X       
+     494/    FA38 : 86 AA               	LDAA #$AA
+     495/    FA3A : A7 05               	STAA 5,X
+     496/    FA3C :                     	
+     497/    FA3C : 86 55               	LDAA #$55	; Do a readback test
+     498/    FA3E : A1 04               	CMPA 4,X
+     499/    FA40 : 26 14               	BNE .FAIL
+     500/    FA42 : 86 AA               	LDAA #$AA
+     501/    FA44 : A1 05               	CMPA 5,X
+     502/    FA46 : 26 0E               	BNE .FAIL
+     503/    FA48 :                     	; Readback fine, check next kB
+     504/    FA48 : 5C                  	INCB
+     505/    FA49 : 96 00               	LDAA ADDRT
+     506/    FA4B : 8B 04               	ADDA #4
+     507/    FA4D : 97 00               	STAA ADDRT
+     508/    FA4F : DE 00               	LDX ADDRT	; Next pointer to check
+     509/    FA51 :                     	
+     510/    FA51 : 8C 1F FF            	CPX #RAMTOP
+     511/    FA54 : 2D DE               	BLT .SIZE
+     512/    FA56 : D7 02               .FAIL   STAB RAMKB	; Save kB count
+     513/    FA58 : 39                  	RTS
+     514/    FA59 :                     ;-----------------------------------------------------------------------
+     515/    FA59 :                     
+     516/    FA59 :                     ; Print out the banner and ram size
+     517/    FA59 :                     BANNER
+     518/    FA59 : CE FC 21            	LDX #S_BANNER
+     519/    FA5C : BD FA FE            	JSR PRINTSTR
+     520/    FA5F : 96 02               	LDAA RAMKB
+     521/    FA61 : 8B 30               	ADDA #'0'
+     522/    FA63 : BD 00 0F            	JSR CONOUT
+     523/    FA66 : CE FC 34            	LDX #S_MEM
+     524/    FA69 : BD FA FE            	JSR PRINTSTR
+     525/    FA6C : 39                  	RTS
+     526/    FA6D :                     ;-----------------------------------------------------------------------
+     527/    FA6D :                     ; Onboard UART routines
+     528/    FA6D : C6 01               S0IN	LDAB #$01	; Receive data full
+     529/    FA6F : F5 EF F0            .L      BITB UART1      
+     530/    FA72 : 27 FB               	BEQ .L
+     531/    FA74 : B6 EF F1            	LDAA UART1+1
+     532/    FA77 : 39                  	RTS
+     533/    FA78 : C6 01               S1IN	LDAB #$01	; Receive data full
+     534/    FA7A : F5 EF F2            .L      BITB UART2      
+     535/    FA7D : 27 FB               	BEQ .L
+     536/    FA7F : B6 EF F3            	LDAA UART2+1
+     537/    FA82 : 39                  	RTS
+     538/    FA83 : C6 02               S0OUT	LDAB #$02	; Transmit data empty
+     539/    FA85 : F5 EF F0            .L:	BITB UART1
+     540/    FA88 : 27 FB               	BEQ .L
+ AS V1.42 Beta [Bld 237] - Source File monitor.asm - Page 10 - 02/08/2023 03:36:03 AM
+
+
+     541/    FA8A : B7 EF F1            	STAA UART1+1	; Send character
+     542/    FA8D : 39                  	RTS
+     543/    FA8E : C6 02               S1OUT	LDAB #$02	; Transmit data empty
+     544/    FA90 : F5 EF F2            .L:	BITB UART2
+     545/    FA93 : 27 FB               	BEQ .L
+     546/    FA95 : B7 EF F3            	STAA UART2+1	; Send character
+     547/    FA98 : 39                  	RTS
+     548/    FA99 :                     ; Non-blocking, 23 cycles (for XMODEM timeout)
+     549/    FA99 : 86 00               S0IN_NB	LDAA #0		; 2 - Default return
+     550/    FA9B : C6 01               	LDAB #$01	; 2 - 
+     551/    FA9D : F5 EF F0            	BITB UART1	; 4 -
+     552/    FAA0 : 27 03               	BEQ .E		; 4 -
+     553/    FAA2 : B6 EF F1            	LDAA UART1+1	; 4 -
+     554/    FAA5 : 4D                  .E	TST A		; 2 - Set flags based on A
+     555/    FAA6 : 39                  	RTS		; 5-
+     556/    FAA7 :                     ; Non-blocking, 23 cycles (for XMODEM timeout)
+     557/    FAA7 : 86 00               S1IN_NB	LDAA #0		; 2 - Default return
+     558/    FAA9 : C6 01               	LDAB #$01	; 2 - 
+     559/    FAAB : F5 EF F2            	BITB UART2	; 4 -
+     560/    FAAE : 27 03               	BEQ .E		; 4 -
+     561/    FAB0 : B6 EF F3            	LDAA UART2+1	; 4 -
+     562/    FAB3 : 4D                  .E	TST A		; 2 - Set flags based on A
+     563/    FAB4 : 39                  	RTS		; 5-
+     564/    FAB5 :                     
+     565/    FAB5 :                     ;-----------------------------------------------------------------------
+     566/    FAB5 :                     ; Default device routines
+     567/    FAB5 :                     DDEVIN
+     568/    FAB5 : 5D                  	TSTB
+     569/    FAB6 : 27 09               	BEQ	.CON
+     570/    FAB8 : C1 01               	CMPB #1
+     571/    FABA : 27 08               	BEQ	.S0
+     572/    FABC : C1 02               	CMPB #2
+     573/    FABE : 27 07               	BEQ	.S1
+     574/    FAC0 :                     	; Invalid ignore
+     575/    FAC0 : 39                  	RTS
+     576/    FAC1 : 7E 00 0C            .CON	JMP CONIN
+     577/    FAC4 : 7E FA 6D            .S0	JMP S0IN
+     578/    FAC7 : 7E FA 78            .S1	JMP S1IN
+     579/    FACA :                     
+     580/    FACA :                     
+     581/    FACA :                     DDEVOUT
+     582/    FACA : 5D                  	TSTB
+     583/    FACB : 27 09               	BEQ	.CON
+     584/    FACD : C1 01               	CMPB #1
+     585/    FACF : 27 08               	BEQ	.S0
+     586/    FAD1 : C1 02               	CMPB #2
+     587/    FAD3 : 27 07               	BEQ	.S1
+     588/    FAD5 :                     	; Invalid ignore
+     589/    FAD5 : 39                  	RTS
+     590/    FAD6 : 7E 00 0F            .CON	JMP CONOUT
+     591/    FAD9 : 7E FA 83            .S0	JMP S0OUT
+     592/    FADC : 7E FA 8E            .S1	JMP S1OUT
+     593/    FADF :                     
+     594/    FADF :                     DDEVINNB
+     595/    FADF : 5D                  	TSTB
+     596/    FAE0 : 27 09               	BEQ	.CON
+     597/    FAE2 : C1 01               	CMPB #1
+     598/    FAE4 : 27 08               	BEQ	.S0
+     599/    FAE6 : C1 02               	CMPB #2
+     600/    FAE8 : 27 07               	BEQ	.S1
+ AS V1.42 Beta [Bld 237] - Source File monitor.asm - Page 11 - 02/08/2023 03:36:03 AM
+
+
+     601/    FAEA :                     	; Invalid ignore
+     602/    FAEA : 39                  	RTS
+     603/    FAEB : 7E 00 12            .CON	JMP CONINNB
+     604/    FAEE : 7E FA 99            .S0	JMP S0IN_NB
+     605/    FAF1 : 7E FA A7            .S1	JMP S1IN_NB
+     606/    FAF4 :                     
+     607/    FAF4 :                     	
+     608/    FAF4 :                     ;-----------------------------------------------------------------------
+     609/    FAF4 :                     ; Print newline
+     610/    FAF4 : 86 0D               NEWLINE	LDAA #'\r'
+     611/    FAF6 : BD 00 0F            	JSR CONOUT
+     612/    FAF9 : 86 0A               	LDAA #'\n'
+     613/    FAFB : 7E 00 0F            	JMP CONOUT	; Tail call
+     614/    FAFE :                     	
+     615/    FAFE :                     ;-----------------------------------------------------------------------
+     616/    FAFE :                     ; Print null terminated string in X
+     617/    FAFE :                     PRINTSTR
+     618/    FAFE : A6 00               	LDAA 0,X
+     619/    FB00 : 27 06               	BEQ .END
+     620/    FB02 : BD 00 0F            	JSR CONOUT
+     621/    FB05 : 08                  	INX
+     622/    FB06 : 20 F6               	BRA PRINTSTR
+     623/    FB08 : 39                  .END    RTS
+     624/    FB09 :                     
+     625/    FB09 :                     ;-----------------------------------------------------------------------
+     626/    FB09 :                     ; Convert to uppercase
+     627/    FB09 :                     TOUPPER
+     628/    FB09 : 81 61               	CMPA #'a'
+     629/    FB0B : 2D 06               	BLT .DONE
+     630/    FB0D : 81 7A               	CMPA #'z'
+     631/    FB0F : 2E 02               	BGT .DONE
+     632/    FB11 : 84 DF               	ANDA #$DF	; Convert
+     633/    FB13 : 39                  .DONE	RTS
+     634/    FB14 :                     
+     635/    FB14 :                     ;-----------------------------------------------------------------------
+     636/    FB14 :                     ; Revieve program over xmodem, loaded starting at $0100
+     637/    FB14 :                     XMDMRECV
+     638/    FB14 : CE 00 00            	LDX #0
+     639/    FB17 : DF 06               	STX TIMER	; Reset timeout
+     640/    FB19 : DF 08               	STX SEQ		; Clear seq and CSUM
+     641/    FB1B : 7C 00 08            	INC SEQ		; Set first sequence to 1
+     642/    FB1E : DE 00               	LDX ADDRT	; Destination pointer
+     643/    FB20 :                     	; Send NAK, and wait for start
+     644/    FB20 : 86 15               .START	LDAA #NAK
+     645/    FB22 : 97 0B               	STAA LAST
+     646/    FB24 : BD 00 0F            	JSR CONOUT
+     647/    FB27 : BD 00 12            .AWAIT	JSR CONINNB	; 9+23, 32 -
+     648/    FB2A : 26 0C               	BNE .GOT1	; 4 -
+     649/    FB2C : 7C 00 07            	INC TIMER+1	; 6 - Timeout counter
+     650/    FB2F : 28 F6               	BVC .AWAIT	; 4- (Each loop is 46 cycles * 256 = 11776 (12.7ms)
+     651/    FB31 : 7C 00 06            	INC TIMER+0	; 6 - 
+     652/    FB34 : 28 F1               	BVC .AWAIT	; 4 - Each loop is 11786 * 256 = 3,017,216 cycles
+     653/    FB36 :                     			; At 921.6kHz this takes at least 3.27 seconds to happen
+     654/    FB36 : 20 E8               	BRA .START	; Try again
+     655/    FB38 :                     .GOT1	; We got a character, is it our start of packet
+     656/    FB38 : 81 01               	CMPA #SOH
+     657/    FB3A : 26 E4               	BNE .START	; It's not, continue trying.
+     658/    FB3C : 86 00               	LDAA #0
+     659/    FB3E : 97 06               	STAA TIMER
+     660/    FB40 : 97 07               	STAA TIMER+1
+ AS V1.42 Beta [Bld 237] - Source File monitor.asm - Page 12 - 02/08/2023 03:36:03 AM
+
+
+     661/    FB42 :                     	; Start of 1st packet, let the protocol begin
+     662/    FB42 : 20 33               	BRA .S1A	; Skip waiting for SOH
+     663/    FB44 : BD 00 12            .S1	JSR CONINNB
+     664/    FB47 : 26 1E               	BNE .GOT2
+     665/    FB49 : 7C 00 07            	INC TIMER+1
+     666/    FB4C : 28 F6               	BVC .S1		; Each loop is 12.7ms
+     667/    FB4E :                     	; Sender probably lost our last reply, resend
+     668/    FB4E : 96 0B               	LDAA LAST
+     669/    FB50 : BD 00 0F            	JSR CONOUT
+     670/    FB53 : 7C 00 06            	INC TIMER	; Use upper count of timer as timeout loop
+     671/    FB56 : D6 06               	LDAB TIMER
+     672/    FB58 : C1 0A               	CMPB #10	; 10 tries before giving up
+     673/    FB5A : 27 02               	BEQ .TIMEOUT
+     674/    FB5C : 20 E6               	BRA .S1
+     675/    FB5E :                     .TIMEOUT
+     676/    FB5E : CE FC 40            	LDX #S_TIME
+     677/    FB61 : BD FA FE            	JSR PRINTSTR
+     678/    FB64 : 7E F8 1E            	JMP ENTER	; Cold start
+     679/    FB67 :                     .GOT2
+     680/    FB67 : C6 00               	LDAB #0
+     681/    FB69 : D7 07               	STAB TIMER+1	; Reset timers
+     682/    FB6B : D7 06               	STAB TIMER+0
+     683/    FB6D : D7 09               	STAB CSUM	; Reset checksum
+     684/    FB6F : 81 04               	CMPA #EOT	
+     685/    FB71 : 27 42               	BEQ .END	; End of transmission
+     686/    FB73 : 81 01               	CMPA #SOH
+     687/    FB75 : 26 35               	BNE .PFAIL	; 
+     688/    FB77 : BD 00 0C            .S1A	JSR CONIN
+     689/    FB7A : 91 08               	CMPA SEQ	; Does the sequence match? 
+     690/    FB7C : 26 2E               	BNE .PFAIL
+     691/    FB7E : BD 00 0C            	JSR CONIN	; Get inverted seq
+     692/    FB81 : 43                  	COMA		; Invert
+     693/    FB82 : 91 08               	CMPA SEQ	; Does it match?
+     694/    FB84 : 26 26               	BNE .PFAIL
+     695/    FB86 :                     	; Okay now we're at the data
+     696/    FB86 : 86 80               	LDAA #128	; # of bytes in data
+     697/    FB88 : 97 0A               	STAA COUNT
+     698/    FB8A : BD 00 0C            .S2	JSR CONIN	
+     699/    FB8D : A7 00               	STAA 0,X	; Store byte
+     700/    FB8F : 08                  	INX		; Next address
+     701/    FB90 : 9B 09               	ADDA CSUM	; Compute checksum
+     702/    FB92 : 97 09               	STAA CSUM
+     703/    FB94 : 7A 00 0A            	DEC COUNT
+     704/    FB97 : 26 F1               	BNE .S2		; Loop till we get out 128 bytes
+     705/    FB99 :                     	; Get the checksum
+     706/    FB99 : BD 00 0C            	JSR CONIN
+     707/    FB9C : 91 09               	CMPA CSUM
+     708/    FB9E : 26 0C               	BNE .PFAIL	; Checksum failed
+     709/    FBA0 :                     	; Packet was good, ACK and continue
+     710/    FBA0 : 86 06               	LDAA #ACK
+     711/    FBA2 : 97 0B               	STAA LAST
+     712/    FBA4 : BD 00 0F            	JSR CONOUT
+     713/    FBA7 : 7C 00 08            	INC SEQ
+     714/    FBAA : 20 98               	BRA .S1
+     715/    FBAC : 86 15               .PFAIL	LDAA #NAK
+     716/    FBAE : 97 0B               	STAA LAST
+     717/    FBB0 : BD 00 0F            	JSR CONOUT	; We did not recieve the packet correctly
+     718/    FBB3 : 20 8F               	BRA .S1
+     719/    FBB5 : 39                  .END	RTS
+     720/    FBB6 :                     	
+ AS V1.42 Beta [Bld 237] - Source File monitor.asm - Page 13 - 02/08/2023 03:36:03 AM
+
+
+     721/    FBB6 :                     ;-----------------------------------------------------------------------
+     722/    FBB6 :                     ; Send via XMODEM starting at addr X to ADDRT
+     723/    FBB6 :                     XMDMSEND	
+     724/    FBB6 : 86 00               	LDAA #0
+     725/    FBB8 : 97 03               	STAA BYTET
+     726/    FBBA : 86 01               	LDAA #1
+     727/    FBBC : 97 08               	STAA SEQ
+     728/    FBBE : BD 00 0C            .AWAIT	JSR CONIN	; Wait for NAK to start
+     729/    FBC1 : 81 15               	CMPA #NAK
+     730/    FBC3 : 26 F9               	BNE .AWAIT
+     731/    FBC5 :                     	; Okay now send the packet
+     732/    FBC5 : 86 01               .S1	LDAA #SOH	; Start of packet
+     733/    FBC7 : BD 00 0F            	JSR CONOUT
+     734/    FBCA : 96 08               	LDAA SEQ	; Sequence number
+     735/    FBCC : BD 00 0F            	JSR CONOUT
+     736/    FBCF : 43                  	COMA		; Inverted sequence
+     737/    FBD0 : BD 00 0F            	JSR CONOUT
+     738/    FBD3 : 86 00               	LDAA #0
+     739/    FBD5 : 97 09               	STAA CSUM
+     740/    FBD7 : 86 80               	LDAA #128	; Bytes in packet
+     741/    FBD9 : 97 0A               	STAA COUNT
+     742/    FBDB : DF 04               	STX ADDRP	; Save address of start of packet 
+     743/    FBDD :                     	; Now the data
+     744/    FBDD : A6 00               .S2	LDAA 0,X	; Read byte
+     745/    FBDF : BD 00 0F            	JSR CONOUT	; Send
+     746/    FBE2 : 9B 09               	ADDA CSUM	; Compute checksum
+     747/    FBE4 : 97 09               	STAA CSUM
+     748/    FBE6 : 08                  	INX		; Next address
+     749/    FBE7 : 9C 00               	CPX ADDRT	; Are we at the stop address yet?
+     750/    FBE9 : 26 03               	BNE .S2A
+     751/    FBEB : 7C 00 03            	INC BYTET	; Indicate we went past the end
+     752/    FBEE : 7A 00 0A            .S2A	DEC COUNT
+     753/    FBF1 : 26 EA               	BNE .S2
+     754/    FBF3 :                     	; Now the checksum
+     755/    FBF3 : 96 09               	LDAA CSUM
+     756/    FBF5 : BD 00 0F            	JSR CONOUT
+     757/    FBF8 :                     	; Check for ACK or NAK
+     758/    FBF8 : BD 00 0C            .S3	JSR CONIN
+     759/    FBFB : 81 06               	CMPA #ACK
+     760/    FBFD : 27 08               	BEQ .NEXT
+     761/    FBFF : 81 15               	CMPA #NAK
+     762/    FC01 : 26 F5               	BNE .S3		; Keep looking for response
+     763/    FC03 : DE 04               .REDO	LDX ADDRP	; Reset address
+     764/    FC05 : 20 BE               	BRA .S1		; Try again
+     765/    FC07 : 7C 00 08            .NEXT	INC SEQ
+     766/    FC0A : 7D 00 03            	TST BYTET	; Did we hit the stop address before?
+     767/    FC0D : 27 B6               	BEQ .S1		; X < ADDRT
+     768/    FC0F : 86 04               .DONE	LDAA #EOT
+     769/    FC11 : BD 00 0F            	JSR CONOUT
+     770/    FC14 : BD 00 0C            	JSR CONIN	; ACK?
+     771/    FC17 : 81 06               	CMPA #ACK
+     772/    FC19 : 26 F4               	BNE .DONE
+     773/    FC1B : 86 17               .DONE2	LDAA #ETB
+     774/    FC1D : BD 00 0F            	JSR CONOUT
+     775/    FC20 : 39                  	RTS
+     776/    FC21 :                     
+     777/    FC21 :                     
+     778/    FC21 : 46 45 4E 4E 45 43   S_BANNER DB "FENNEC-68MON 0.3\r\n", 0
+             FC27 : 2D 36 38 4D 4F 4E 
+             FC2D : 20 30 2E 33 0D 0A 
+ AS V1.42 Beta [Bld 237] - Source File monitor.asm - Page 14 - 02/08/2023 03:36:03 AM
+
+
+             FC33 : 00                
+     779/    FC34 : 6B 42 20 4D 45 4D   S_MEM    DB "kB MEMORY\r\n",0
+             FC3A : 4F 52 59 0D 0A 00 
+     780/    FC40 : 54 49 4D 45 4F 55   S_TIME	 DB "TIMEOUT\r\n",0
+             FC46 : 54 0D 0A 00       
+     781/    FC4A : 53 45 4E 44 00      S_SEND	 DB "SEND",0
+     782/    FC4F : 52 45 43 56 00      S_RECV	 DB "RECV",0 
+     783/    FC54 : 20 46 49 4C 45 20   S_FILE	 DB " FILE NOW\r\n",0
+             FC5A : 4E 4F 57 0D 0A 00 
+     784/    FC60 : 4F 50 54 49 4F 4E   S_OPTION DB "OPTION ROMS:\r\n", 0
+             FC66 : 20 52 4F 4D 53 3A 
+             FC6C : 0D 0A 00          
+     785/    FC6F :                     
+     786/    FC6F :                     
+     787/    FC6F :                     
+     788/    FC6F :                     
+     789/    FC6F :                     
+     790/    FC6F :                     IRQHND
+     791/    FC6F :                     SWIHND
+     792/    FC6F :                     NMIHND	
+     793/    FC6F : 20 FE               HALTL	BRA HALTL
+     794/    FC71 :                     
+     795/    FFF8 :                     	ORG $FFF8	; Vectors
+     796/    FFF8 : FC 6F               IRQV	DW IRQHND
+     797/    FFFA : FC 6F               SWIV	DW SWIHND
+     798/    FFFC : FC 6F               NMIV	DW NMIHND
+     799/    FFFE : F8 00               RESV	DW START
+     800/   10000 :                     
+ AS V1.42 Beta [Bld 237] - Source File monitor.asm - Page 15 - 02/08/2023 03:36:03 AM
+
+
+  Symbol Table (* = unused):
+  --------------------------
+
+ ACK :                            6 - |  ADDR1 :                       F89B C |
+ ADDR2 :                       F891 C |  ADDRP :                          4 - |
+ ADDRT :                          0 - |
+*ARCHITECTURE :                                     "aarch64-unknown-linux" - |
+ AUXIN :                         15 - |  AUXINNB :                       1B - |
+ AUXOUT :                        18 - |  BANNER :                      FA59 C |
+ BYTET :                          3 - | *CASESENSITIVE :                  0 - |
+*COMPMODE :                       0 - |  CONIN :                          C - |
+ CONINNB :                       12 - |  CONOUT :                         F - |
+*CONSTPI :        3.141592653589793 - |  CONTINIT :                    FA19 C |
+ CONTINIT.COPY :               FA23 C |  CONTR :                          C - |
+ CONTRE :                        27 - |  COUNT :                          A - |
+ CSUM :                           9 - | *DATE :                "02/08/2023" - |
+ DDEVIN :                      FAB5 C |  DDEVIN.CON :                  FAC1 C |
+ DDEVIN.S0 :                   FAC4 C |  DDEVIN.S1 :                   FAC7 C |
+ DDEVINNB :                    FADF C |  DDEVINNB.CON :                FAEB C |
+ DDEVINNB.S0 :                 FAEE C |  DDEVINNB.S1 :                 FAF1 C |
+ DDEVOUT :                     FACA C |  DDEVOUT.CON :                 FAD6 C |
+ DDEVOUT.S0 :                  FAD9 C |  DDEVOUT.S1 :                  FADC C |
+ DEFRT :                       F803 C |  DEFRTE :                      F81E C |
+ DEFRTLEN :                      1B - |  DEPLOOP :                     F91B C |
+ DEPLOOP.DIGIT :               F94B C |  DEPLOOP.DONE :                F961 C |
+ DEPLOOP.IGNORE :              F92A C |  DEPLOOP.LOOP :                F929 C |
+ DEPLOOP.NEXT :                F91D C |  DEPLOOP.T2 :                  F937 C |
+ DEPOSIT :                     F866 C |  DEVIN :                         1E - |
+ DEVINNB :                       24 - |  DEVOUT :                        21 - |
+ DUMP :                        F963 C |  DUMP.DONE :                   F98D C |
+ DUMP.LOOP :                   F96F C |  ENDROM :                        E0 - |
+ ENTER :                       F81E C |  EOT :                            4 - |
+ ESC :                           1B - |  ETB :                           17 - |
+ EXAMINE :                     F85E C | *FALSE :                          0 - |
+ FINDROM :                     F8BC C |  FINDROM.FOUND :               F8DA C |
+ FINDROM.LOOP :                F8BF C |  FINDROM.NEXT :                F8CB C |
+*FULLPMMU :                       1 - |  GOTO :                        F86E C |
+ HALTL :                       FC6F C | *HAS64 :                          1 - |
+*HASFPU :                         0 - | *HASPMMU :                        0 - |
+*INSUPMODE :                      0 - |  IRQHND :                      FC6F C |
+*IRQV :                        FFF8 C |  LAST :                           B - |
+*LISTON :                         1 - |  LOOP :                        F836 C |
+ LOOPI :                       F83E C | *MACEXP :                         7 - |
+*MAGIC :                       F10F - |  MAGIC0 :                        F1 - |
+ MAGIC1 :                         F - | *MOMCPU :                      6800 - |
+*MOMCPUNAME :                "6800" - |  MONSTK :                        FF - |
+ NAK :                           15 - | *NESTMAX :                      100 - |
+ NEWLINE :                     FAF4 C |  NMIHND :                      FC6F C |
+*NMIV :                        FFFC C | *PADDING :                        0 - |
+ PRINTBYTE :                   F9F2 C |  PRINTNYB :                    F9FB C |
+ PRINTNYB.NOFIX :              FA05 C |  PRINTROM :                    F8E2 C |
+ PRINTROM.FOUND :              F906 C |  PRINTROM.LOOP :               F8EB C |
+ PRINTROM.NEXT :               F8F7 C |  PRINTSTR :                    FAFE C |
+ PRINTSTR.END :                FB08 C |  PRINTWORD :                   F9EB C |
+ PROMPT :                       '*' - |  PSTART :                      8000 - |
+ RAMKB :                          2 - |  RAMSIZE :                     FA2D C |
+ RAMSIZE.FAIL :                FA56 C |  RAMSIZE.SIZE :                FA34 C |
+ RAMTOP :                      1FFF - |  READADDR :                    F997 C |
+ READBYTE :                    F9A6 C |  READBYTE.DIGIT :              F9D1 C |
+ READBYTE.DIGIT2 :             F9D4 C |  READBYTE.NEXT :               F9AC C |
+ AS V1.42 Beta [Bld 237] - Source File monitor.asm - Page 16 - 02/08/2023 03:36:03 AM
+
+
+ READBYTE.NEXT2 :              F9AD C |  READBYTE.NEXT3 :              F9BA C |
+ READBYTEP :                   F98E C | *RELAXED :                        0 - |
+*RESV :                        FFFE C | *ROMNLEN :                        A - |
+*ROMOFF :                        10 - | *ROMSIG :                      F10F - |
+ ROMSPA :                         4 - |  S0IN :                        FA6D C |
+ S0IN.L :                      FA6F C |  S0IN_NB :                     FA99 C |
+ S0IN_NB.E :                   FAA5 C |  S0OUT :                       FA83 C |
+ S0OUT.L :                     FA85 C |  S1IN :                        FA78 C |
+ S1IN.L :                      FA7A C |  S1IN_NB :                     FAA7 C |
+ S1IN_NB.E :                   FAB3 C |  S1OUT :                       FA8E C |
+ S1OUT.L :                     FA90 C |  SEQ :                            8 - |
+ SOH :                            1 - |  START :                       F800 C |
+ SWIHND :                      FC6F C | *SWIV :                        FFFA C |
+ S_BANNER :                    FC21 C |  S_FILE :                      FC54 C |
+ S_MEM :                       FC34 C |  S_OPTION :                    FC60 C |
+ S_RECV :                      FC4F C |  S_SEND :                      FC4A C |
+ S_TIME :                      FC40 C | *TIME :               "03:36:03 AM" - |
+ TIMER :                          6 - |  TOUPPER :                     FB09 C |
+ TOUPPER.DONE :                FB13 C | *TRUE :                           1 - |
+ UART1 :                       EFF0 - |  UART2 :                       EFF2 - |
+ UARTINIT :                    FA08 C | *VERSION :                     142F - |
+ WARMST :                      F833 C |  XMDMRECV :                    FB14 C |
+ XMDMRECV.AWAIT :              FB27 C |  XMDMRECV.END :                FBB5 C |
+ XMDMRECV.GOT1 :               FB38 C |  XMDMRECV.GOT2 :               FB67 C |
+ XMDMRECV.PFAIL :              FBAC C |  XMDMRECV.S1 :                 FB44 C |
+ XMDMRECV.S1A :                FB77 C |  XMDMRECV.S2 :                 FB8A C |
+ XMDMRECV.START :              FB20 C |  XMDMRECV.TIMEOUT :            FB5E C |
+ XMDMSEND :                    FBB6 C |  XMDMSEND.AWAIT :              FBBE C |
+ XMDMSEND.DONE :               FC0F C | *XMDMSEND.DONE2 :              FC1B C |
+ XMDMSEND.NEXT :               FC07 C | *XMDMSEND.REDO :               FC03 C |
+ XMDMSEND.S1 :                 FBC5 C |  XMDMSEND.S2 :                 FBDD C |
+ XMDMSEND.S2A :                FBEE C |  XMDMSEND.S3 :                 FBF8 C |
+ XMSG :                        F8A5 C |  XMSG.RECV :                   F8B0 C |
+ XRECV :                       F877 C |  XSEND :                       F884 C |
+
+    180 symbols
+     31 unused symbols
+
+ AS V1.42 Beta [Bld 237] - Source File monitor.asm - Page 17 - 02/08/2023 03:36:03 AM
+
+
+  Code Pages:
+  ----------
+
+STANDARD (0 changed characters)
+
+1 code page
+
+0.02 seconds assembly time
+
+    800 lines source file
+      2 passes
+      0 errors
+      0 warnings
