@@ -1,6 +1,8 @@
 # Fennec 6800
 A Motorola 6800 Based Expandable Single Board Computer
 
+![Picture of an Assembled Fennec 6800 Computer](/images/fennec_banner.png)
+
 ## Introduction
 The Fennec 6800 is a Motorola 6800 based single board computer (SBC) created with the inspiration of targeting 1977 components and features. It features an original Motorola 6800 processor running at whopping 921.6kHz, 8kB of the latest 2114 SRAM, 2kB of ROM using the brand new 2716 EPROM, and dual serial ports. An optional 40 pin expansion bus allows for connectivity to other modules, such as the Fennec VTI video terminal interface board, or to create your own attachments.
 
