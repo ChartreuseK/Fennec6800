@@ -1,0 +1,17 @@
+# Gerbers for Fennec 6800 board
+The plainmask suffixed files contain "normal" solder masks, traces are covered in solder mask as with normal PCBs, this is not the intended look for the Fennec but is provided as an option if people wish. This is the output you get when plotting out the gerber files from KiCAD.
+
+The _exposedtraces_ suffixed files have had the _Cu gerber files copied overtop the _Mask gerber files, this results in all traces and copper on the board being exposed, but the rest of the board being covered in solder mask, resulting in the Fennec's unique look. This is the gerbers you probably want if you're recreating it.
+
+# Creating your own gerbers
+
+If you're making changed in KiCAD and want to get this look, simply copy the two Cu gerber files overtop the corresponding mask file. 
+eg.
+cp Fennec6800-B_cu.gbl Fennec6800-B_Mask.gbs
+cp Fennec6800-F_cu.gbl Fennec6800-F_Mask.gbs
+
+If not using protel extensions the file names will be different but the concept is the same. 
+
+Keep in mind that and custom "keep-out" regions on the mask layers will be lost when doing this. A more complex technique of copying the copper paths to the mask layer in KiCAD would need to be done to preserve them, or hand editing of the gerber code. As the Mask layers in gerber files are inverse, ie. the file specifies where NOT to put soldermask, this results in all copper on the board being left exposed with only the bare FR4 part of the board being covered in the solder mask.
+
+If your PCB fab has access to dyed FR4 board, an even better option is then to eliminate the masks entirely, either by communicating with the fab and asking for no solder mask, or in KiCAD adding a "keep out" box that covers the entire board on both Mask layers. This would result in the "true" intention look of the Fennec if you have access to blue dyed FR4 board. 

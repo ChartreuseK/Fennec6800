@@ -1,0 +1,47 @@
+Reference Designators,Qty.,Part,Digikey Part #,Alternative Digikey Part # (ICs are HCT instead of LS)
+"C1, C2, C3, C4, C5, C6, C8, C10, C12, C14, C16, C17, C19, C20, C21, C22, C23, C24, C25, C26, C27, C28, C29, C30, C31, C32, C33, C34, C35, C36, C37, C38, C39, C45, C53",35,"0.1uF 50v Ceramic Capacitor, .1” pin pitch",399-14036-1-ND,
+"C7, C9, C11, C13, C40, C41, C42, C43",8,"10uF 16v Tantalum Capacitor, .1” pin pitch",478-TAP106K016CRSCT-ND,
+C15,1,"100uF 16v Aluminum Electrolytic. .1” pin pitch, diameter < 6.3mm",P19632CT-ND,
+C18,1,"470uF 16v Aluminum Electrolytic. 5mm pin pitch, diameter <13mm",P12375-ND,
+"C44, C46, C47, C48, C49, C50, C51, C52, C56, C55, C56",11,"1.0uF 50v X5R Ceramic Capactior, .1” pin pitch",445-173257-1-ND,478-11561-1-ND
+D1,1,T1-3/4 (5mm) low-brightness red LED,160-1707-ND,
+D2,1,1N4148 DO-3 diode,1N4148FS-ND,
+J1,1,"Barrel_Jack, 2.1mm x 5.5mm",CP-202A-ND,CP-102A-ND
+"J2, J4",2,"DB25 Male, right angle board mount. 7.7mm pin edge offset, 9.12mm mounting hole offset",2057-DB25-PL-24-ND,
+J3,1,2x20 0.1” male pin header,10129381-940002BLF-ND,S2011EC-40-ND
+JP1,1,1x2 0.1” male pin header,2057-PH1-02-UA-ND,S1011EC-40-ND
+Q1,1,2N3904-AP TO-92 package with stagered center pin,2N3904BU,2N3904-AP
+"R1, R2",2,620 ohm 1/4W 5% Carbon Film,620QBK-ND,
+"R3, R4, R5, R6, R7, R8, R13",8,10k ohm 1/4W 5% Carbon Film,CF14JT10K0CT-ND,
+"R9, R10",2,470k ohm 1/4W 5% Carbon Film,CF14JT470KCT-ND,
+R12,1,470 ohm 1/4W 5% Carbon Film,CF14JT470RCT-ND,
+"SW1, SW2",2,"DIP-12, 6 pole DIP switch, 0.3” spacing",2449-KG06E-ND ,
+SW3,1,6mm through hole push button,679-2428-ND,
+SW4,1,"ESWITCH 100SP1T2B4M7QE right angle toggle switch or compatible, SPDT switch",EG5419-ND,
+U1,1,74LS00 DIP,296-1626-ND,296-1603-5-ND
+U2,1,74LS04 DIP,296-1629-5-ND,296-1605-5-ND
+U3,1,74LS193 DIP,296-1605-5-ND,296-2142-5-ND
+U4,1,74LS73 DIP,296-26520-5-ND,296-3541-5-ND 
+U5,1,74LS02 DIP,296-1627-5-ND,296-3541-5-ND 
+U6,1,74LS74 DIP,296-1668-5-ND,296-1605-5-ND
+"U7, U8",2,MC6850 (68A50/68B50/6350/63A50/63B50) DIP,"Vintage, eBay",
+"U9, U10",2,74LS245 DIP,296-1655-5-ND,296-2105-5-ND
+U11,1,MC6800 Microprocessor,"Vintage, eBay",
+"U12, U13, U14",3,74LS244 DIP,296-1653-5-ND,296-1610-5-ND
+"U15, U16",2,74LS138 DIP,296-1639-5-ND,296-1608-5-ND
+"U17, U18, U19, U20, U22, U23, U24, U25, U26, U27, U28, U29, U30, U31, U32, U33",16,P2114 SRAM DIP-18,"Vintage, eBay",
+U21,1,2716 EPROM or 28C16 EEPROM,"Vintage, eBay",
+"U34, U35",2,MAX232ECN or similar DIP,296-26139-5-ND,
+U36,1,74LS30 DIP,296-3693-5-ND,296-2111-5-ND
+U37,1,NE555P DIP,296-NE555P-ND,ICM7555IPAZ-ND
+X1,1,1.8432MHz Full-can (DIP-14) oscillator,X939-ND,110-MXO45-3C-1M843200-ND
+,,,,
+,,,,
+,,,,
+X1 Socket,1,DIP-14 (0.3”) crystal socket,ED90428-ND,
+"U7, U8, U21 Socket",3,DIP-24 (0.6”) socket,1175-2554-ND,
+"U9, U10, U12, U13, U14 Socket",5,DIP-20 (0.3”) socket,AE9998-ND,
+U11 Socket,1,DIP-40 (0.6”) socket,ED3033-ND,
+"U1, U2, U4, U5, U6, U36 Socket",6,DIP-14 (0.3”) socket,2057-ICS-314-T-ND,
+"U3, U15, U16, U34, U45",5,DIP-16 (0.3”) socket,AE9992-ND,
+"U17, U18, U19, U20, U22, U23, U24, U25, U26, U27, U28, U29, U30, U31, U32, U33 Socket",16,DIP-18 (0.3”) socket,2057-ICS-318-T-ND,

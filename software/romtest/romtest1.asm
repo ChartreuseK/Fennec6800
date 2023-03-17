@@ -6,12 +6,13 @@ UART2	EQU $EFF2
 
 	ORG $F800	; 2kB ROM
 START
-    LDAA #$03   ; Master reset
-    STAA UART1
-    STAA UART2
-    LDAA #$15   ; /16 8N1, RTS asserted no interrupts
-    STAA UART1
-    STAA UART2
+	LDAA #$03	; Master reset
+	STAA UART1
+	STAA UART2
+	LDAA #$15	; /16 8N1, RTS asserted no interrupts
+	STAA UART1
+	STAA UART2
+
 	LDAA #$02	; Transmit data empty
 	LDAB #'A'	; Character to send
 TXLOOP	BITA UART1
