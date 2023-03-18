@@ -39,6 +39,10 @@ The 2716 EPROM on the Fennec 6800 should be burned with the file `software/monit
 The monitor source code is designed to be assembled with the cross-platform [AS macro assembler](http://john.ccac.rwth-aachen.de:8000/as/). It may be possible to assemble with other assemblers supporting the 6800, but some changes to the local label syntax may be required. The output of the macro assembler is it's own p file format which can then be converted using p2bin or p2hex to a suitable output format.
 
     asl -L monitor.asm && p2bin monitor.p
+## Expansions
 
-## 62256 RAM Adapter
+### 62256 RAM Adapter
 In the folder Fennec 62256 RAM Adapter you can find a second PCB which allows the use of common and still in production 62256 (32k x 8) SRAM chips in place of the vintage and hard to source 2114 sram that the Fennec is designed for. This board slots into the top two ram sockets as well as the 74LS138 socket to provide the full 8kB of RAM that the board is designed for. Optionally A13 and A14 may be run to this adapter board to give the Fennec 32kB of RAM, more than normally designed for. 
+
+### Fennec VTI
+The [Fennec VTI](https://github.com/ChartreuseK/Fennec6800_VTI) is a 64x16 line text terminal interface with parallel ascii keyboard to provide a local terminal for the Fennec. It negates the need for an external serial terminal, or terminal emulator, making the Fennec into a self contained system. Using the extra port on the PIA on this card, combined with protoboard space, also allows it to be used for experimentations and developing hardware.
